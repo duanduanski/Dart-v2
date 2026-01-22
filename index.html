@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Darty Pro Offline</title>
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/811/811440.png">
+    
+    <style>
+        :root { --primary: #27ae60; --dark: #2c3e50; --bg: #f4f7f6; --gray: #bdc3c7; --accent: #2980b9; --danger: #e74c3c; }
+        * { user-select: none; -webkit-user-select: none; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; background-color: var(--bg); touch-action: pan-y; overflow-x: hidden; padding-bottom: 100px; }
+        
+        #setup, .overlay-screen { max-width: 450px; margin: 10px auto; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .overlay-screen { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 95%; height: 90vh; z-index: 5000; display: none; overflow-y: auto; margin-top: 5vh; border: 1px solid #ddd; }
+        
+        .menu-btns { display: flex; gap: 10px; margin-bottom: 15px; }
+        .btn-menu { flex: 1; padding: 12px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 0.8rem; }
+
+        .record-item { background: #f9f9f9; border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 10px; text-align: left; cursor: pointer; }
+        .record-details { background: #eee; padding: 10px; border-radius: 8px; margin-top: 5px; font-size: 0.85rem; line-height: 1.4; }
+        
+        .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .stats-table th, .stats-table td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        .stats-table th { background: #f2f2f2; }
+
+        .scoreboard { display: flex; overflow-x: auto; padding: 15px 0; gap: 12px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .player { min-width: 140px; padding: 12px; background: white; border-radius: 15px; border: 3px solid transparent; flex: 0 0 auto; box-shadow: 0 3px 5px rgba(0,0,0,0.05); transition: 0.3s; }
+        .player.current { border-color: var(--primary); transform: scale(1.05); }
+        .player.finished { opacity: 0.5; background: #dcdde1; }
+        .player-score { font-size: 1.8rem; font-weight: 900; color: var(--dark); }
+        .legs-count { font-size: 0.8rem; color: #e67e22; font-weight: bold; }
+
+        .spacer { min-width: calc(50vw - 78px); flex: 0 0 auto; pointer-events: none; }
+        .turn-info { background: var(--dark); color: white; padding: 10px; }
+        .buttons { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 520px; margin: 10px auto; padding: 0 10px; }
+        .btn-dart { padding: 15px 0; border: 1px solid #ddd; border-radius: 8px; background: white; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .btn-spec { background: #16a085; color: white; }
+        .btn-bull { background: #27ae60; color: white; grid-column: span 3; }
+        .btn-zero { background: #95a5a6; color: white; grid-column: span 4; }
+        
+        #nextTurnPanel { position: fixed; bottom: 0; left: 0; width: 100%; height: 95px; background: white; border-top: 2px solid #ddd; display: none; justify-content: center; align-items: center; z-index: 4000; }
+        .big-next-btn { width: 90%; height: 65px; background: var(--gray); color: white; border: none; font-size: 1.4rem; font-weight: bold; border-radius: 15px; transition: 0.2s; pointer-events: none; }
+        .big-next-btn.ready { background: var(--primary); pointer-events: auto; animation: bounce 0.3s ease; }
+        @keyframes bounce { 0% {transform: scale(0.95);} 100% {transform: scale(1);} }
+
+        #floatingMultipliers { position: fixed; display: none; gap: 12px; z-index: 2000; padding: 12px; background: white; border-radius: 40px; border: 2px solid var(--dark); width: 220px; justify-content: center; }
+        .mult-pop { width: 55px; height: 55px; border-radius: 50%; border: none; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
+        
+        .btn-ctrl { padding: 15px; border-radius: 10px; border: none; color: white; font-weight: bold; flex: 1; }
+        .row { display: flex; gap: 10px; width: 100%; max-width: 400px; margin: 5px auto; }
+        select, input { width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; }
+        
+        /* Instalacja */
+        #installBanner { position: fixed; top: 0; width: 100%; background: var(--accent); color: white; padding: 10px; display: none; z-index: 9999; }
+    </style>
+</head>
+<body>
+
+<div id="installBanner">
+    Czy chcesz zainstalować Darty Pro na ekranie głównym? 
+    <button onclick="installApp()" style="padding:5px 10px; margin-left:10px;">TAK</button>
+</div>
+
+<div id="setup">
+    <h2>🎯 Dart Counter Pro</h2>
+    <div class="menu-btns">
+        <button class="btn-menu" style="background:var(--accent)" onclick="showHistory()">📜 HISTORIA</button>
+        <button class="btn-menu" style="background:#8e44ad" onclick="showStats()">📊 STATYSTYKI</button>
+    </div>
+    <select id="gameType"><option value="301">301</option><option value="501" selected>501</option><option value="701">701</option><option value="901">901</option></select>
+    <select id="numPlayers" onchange="initPlayerInputs()">
+        <option value="1">1 Gracz</option><option value="2" selected>2 Graczy</option>
+        <option value="3">3 Graczy</option><option value="4">4 Graczy</option>
+        <option value="5">5 Graczy</option><option value="6">6 Graczy</option>
+    </select>
+    <div style="font-size:0.9rem; margin:10px 0;">
+        Turniej: <input type="checkbox" id="tourMode" style="width:20px" onchange="$('legInput').style.display = this.checked ? 'block' : 'none'">
+        <span id="legInput" style="display:none;"> do <input type="number" id="legsToWin" value="3" style="width:50px"> legów</span>
+    </div>
+    <div style="font-size:0.8rem; margin-bottom:10px;"><input type="checkbox" id="doubleOut" style="width:auto"> Double Out</div>
+    <div id="playerNames"></div>
+    <button onclick="startNewGame()" style="background:var(--primary); color:white; width:90%; padding:15px; border:none; border-radius:10px; font-weight:bold; margin-top:10px;">ROZPOCZNIJ GRĘ</button>
+</div>
+
+<div id="historyView" class="overlay-screen">
+    <h3>📜 Historia Gier</h3>
+    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogs()">WYCZYŚĆ HISTORIĘ</button>
+    <div id="historyContent"></div>
+    <button class="btn-ctrl" style="background:var(--dark); width:100%; margin-top:20px;" onclick="closeOverlays()">ZAMKNIJ</button>
+</div>
+
+<div id="statsView" class="overlay-screen">
+    <h3>📊 Ranking Graczy</h3>
+    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogs()">WYCZYŚĆ STATYSTYKI</button>
+    <div id="statsContent"></div>
+    <button class="btn-ctrl" style="background:var(--dark); width:100%; margin-top:20px;" onclick="closeOverlays()">ZAMKNIJ</button>
+</div>
+
+<div id="game" style="display:none;">
+    <div class="scoreboard" id="scoreboard"></div>
+    <div class="turn-info">
+        <div id="currentPlayerName">---</div>
+        <div style="font-size: 1.3rem;"><strong id="turnTotal">0</strong> (<span id="throwCount">0/3</span>)</div>
+        <div id="throwHistory" style="font-size: 0.9rem; color:#bdc3c7; margin-top:3px; height:1.2rem;"></div>
+    </div>
+    <div class="buttons" id="dartButtons"></div>
+    <div class="controls">
+        <div id="endGameArea"></div>
+        <div class="row">
+            <button class="btn-ctrl" style="background:#e67e22" onclick="undoLastThrow()">Cofnij</button>
+            <button class="btn-ctrl" style="background:#7f8c8d" onclick="confirmExit()">Menu</button>
+        </div>
+    </div>
+</div>
+
+<div id="nextTurnPanel">
+    <button id="bigNextBtn" class="big-next-btn" onclick="finishTurn()">NASTĘPNY GRACZ ➔</button>
+</div>
+
+<div id="floatingMultipliers">
+    <button class="mult-pop" style="background:#3498db" onclick="handleMult(1)">x1</button>
+    <button class="mult-pop" style="background:#e67e22" onclick="handleMult(2)">x2</button>
+    <button class="mult-pop" style="background:#e74c3c" onclick="handleMult(3)">x3</button>
+</div>
+
+<script>
+/* --- LOGIKA PWA & OFFLINE --- */
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // Tworzymy Service Worker jako Blob, żeby nie potrzebować osobnego pliku na serwerze
+        const swContent = `
+            const CACHE_NAME = 'dart-cache-v1';
+            const urlsToCache = [location.href, '/'];
+            self.addEventListener('install', e => e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(urlsToCache))));
+            self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+        `;
+        const blob = new Blob([swContent], {type: 'text/javascript'});
+        const swUrl = URL.createObjectURL(blob);
+        navigator.serviceWorker.register(swUrl).catch(err => console.log("SW Error", err));
+    });
+}
+
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $('installBanner').style.display = 'block';
+});
+
+function installApp() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+        $('installBanner').style.display = 'none';
+        deferredPrompt = null;
+    });
+}
+
+/* --- LOGIKA GRY (BEZ ZMIAN) --- */
+const STATE_KEY = 'dart_v24_state';
+const LOG_KEY = 'dart_v24_logs';
+let gameState = null;
+let turnThrows = [];
+let activeBase = null;
+let longPressTimer = null;
+let touchStart = { x: 0, y: 0 };
+let movedDist = 0;
+let legWinner = null;
+let safetyTimer = null;
+
+function $(id) { return document.getElementById(id); }
+function closeOverlays() { $('historyView').style.display = 'none'; $('statsView').style.display = 'none'; }
+
+function clearLogs() {
+    if(confirm("Czy na pewno chcesz usunąć całą historię i statystyki?")) {
+        localStorage.removeItem(LOG_KEY);
+        closeOverlays();
+    }
+}
+
+function initPlayerInputs() {
+    const n = parseInt($('numPlayers').value);
+    const container = $('playerNames'); container.innerHTML = '';
+    for (let i = 1; i <= n; i++) {
+        const input = document.createElement('input');
+        input.placeholder = `Gracz ${i}`;
+        input.id = `pName${i}`;
+        input.value = localStorage.getItem(`dart_name_${i}`) || '';
+        container.appendChild(input);
+    }
+}
+
+function startNewGame() {
+    const players = [];
+    const now = new Date();
+    for (let i = 1; i <= parseInt($('numPlayers').value); i++) {
+        const name = $(`pName${i}`).value.trim() || `Gracz ${i}`;
+        localStorage.setItem(`dart_name_${i}`, name);
+        players.push({ name, score: parseInt($('gameType').value), startScore: parseInt($('gameType').value), totalPoints:0, turns:0, isOut:false, legsWon: 0, dartsThrown: 0, rank: 0 });
+    }
+    gameState = { 
+        gameType: parseInt($('gameType').value), players, currentPlayer:0, 
+        doubleOut: $('doubleOut').checked, tourMode: $('tourMode').checked, 
+        legsToWin: parseInt($('legsToWin').value),
+        startTime: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        finishedPlayers: 0
+    };
+    loadGameUI();
+}
+
+function saveFinalRecord() {
+    let logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    const record = {
+        date: gameState.startTime,
+        type: gameState.gameType + (gameState.tourMode ? ' (Turniej)' : ' (Mecz)'),
+        players: gameState.players.map(p => ({
+            name: p.name, rank: p.rank || (gameState.finishedPlayers + 1), darts: p.dartsThrown, legs: p.legsWon
+        })).sort((a,b) => a.rank - b.rank)
+    };
+    logs.unshift(record);
+    localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, 100)));
+}
+
+function showHistory() {
+    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    $('historyContent').innerHTML = logs.map((l, idx) => `
+        <div class="record-item" onclick="toggleDetails(${idx})">
+            <strong>📅 ${l.date}</strong> - ${l.type}
+            <div id="details-${idx}" class="record-details" style="display:none">
+                ${l.players.map(p => `<b>${p.rank}. ${p.name}</b> - rzuty: ${p.darts} ${l.type.includes('Turniej') ? `(Legi: ${p.legs})` : ''}`).join('<br>')}
+            </div>
+        </div>
+    `).join('') || 'Brak historii.';
+    $('historyView').style.display = 'block';
+}
+
+function toggleDetails(idx) {
+    const el = $(`details-${idx}`);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function showStats() {
+    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    const stats = {};
+    logs.forEach(l => {
+        l.players.forEach(p => {
+            if (!stats[p.name]) stats[p.name] = { games: 0, tour: 0 };
+            if (p.rank === 1) {
+                if (l.type.includes('Turniej')) stats[p.name].tour++;
+                else stats[p.name].games++;
+            }
+        });
+    });
+    const sorted = Object.entries(stats).sort((a,b) => (b[1].games + b[1].tour) - (a[1].games + a[1].tour));
+    $('statsContent').innerHTML = `<table class="stats-table"><tr><th>Gracz</th><th>Mecze</th><th>Turnieje</th></tr>${sorted.map(([name, data]) => `<tr><td><b>${name}</b></td><td>${data.games}</td><td>${data.tour}</td></tr>`).join('')}</table>` || 'Brak statystyk.';
+    $('statsView').style.display = 'block';
+}
+
+function addThrow(pts, isDouble = false) {
+    if (turnThrows.length >= 3 || legWinner) return;
+    const p = gameState.players[gameState.currentPlayer];
+    const newScore = p.score - pts;
+    let bust = (newScore < 0) || (newScore === 1 && gameState.doubleOut) || (newScore === 0 && gameState.doubleOut && !isDouble);
+    
+    p.dartsThrown++;
+    if (bust) {
+        p.score = p.startScore; turnThrows = [{pts:0, bust:true},{pts:0, bust:true},{pts:0, bust:true}]; 
+        triggerNextTurnUI();
+    } else {
+        turnThrows.push({ pts, isDouble });
+        p.score = newScore; p.totalPoints += pts;
+        if (newScore === 0) {
+            p.legsWon++;
+            if (gameState.tourMode && p.legsWon < gameState.legsToWin) {
+                legWinner = p.name; triggerNextTurnUI();
+            } else {
+                p.isOut = true; gameState.finishedPlayers++; p.rank = gameState.finishedPlayers;
+                triggerNextTurnUI();
+            }
+        }
+    }
+    refresh();
+    if (turnThrows.length === 3) triggerNextTurnUI();
+}
+
+function triggerNextTurnUI() {
+    $('nextTurnPanel').style.display = 'flex';
+    $('bigNextBtn').classList.remove('ready');
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(() => { $('bigNextBtn').classList.add('ready'); }, 600);
+}
+
+function finishTurn() {
+    if (!$('bigNextBtn').classList.contains('ready')) return;
+    $('nextTurnPanel').style.display = 'none';
+    if (legWinner) {
+        gameState.players.forEach(p => { p.score = gameState.gameType; p.startScore = gameState.gameType; });
+        legWinner = null; gameState.currentPlayer = 0;
+    } else {
+        const p = gameState.players[gameState.currentPlayer];
+        p.startScore = p.score; p.turns++;
+        let active = gameState.players.filter(x => !x.isOut);
+        if (active.length > 0) {
+            do { gameState.currentPlayer = (gameState.currentPlayer + 1) % gameState.players.length; } 
+            while (gameState.players[gameState.currentPlayer].isOut && active.length > 0);
+        } else { endGameAndSave(); }
+    }
+    turnThrows = []; refresh(); centerActivePlayer();
+}
+
+function endGameAndSave() {
+    saveFinalRecord();
+    localStorage.removeItem(STATE_KEY);
+    location.reload();
+}
+
+function undoLastThrow() {
+    if (turnThrows.length === 0) return;
+    $('nextTurnPanel').style.display = 'none';
+    const p = gameState.players[gameState.currentPlayer];
+    if (turnThrows.some(t => t.bust)) {
+        turnThrows = []; p.score = p.startScore; p.dartsThrown -= 3;
+    } else {
+        const last = turnThrows.pop();
+        p.score += last.pts; p.totalPoints -= last.pts; p.dartsThrown--;
+        if(p.score > 0) { if(p.isOut) gameState.finishedPlayers--; p.isOut = false; p.rank = 0; }
+        legWinner = null;
+    }
+    refresh();
+}
+
+function createBtn(val, container, cl = '', label = '') {
+    const btn = document.createElement('button');
+    btn.className = 'btn-dart ' + cl; btn.textContent = label || val;
+    btn.onpointerdown = (e) => {
+        touchStart = { x: e.clientX, y: e.clientY }; movedDist = 0;
+        if (val === 0 || val === 50 || val === 25) return;
+        activeBase = val;
+        longPressTimer = setTimeout(() => { if (movedDist < 10) showPop(e.clientX, e.clientY); }, 400);
+    };
+    btn.onpointerup = (e) => {
+        clearTimeout(longPressTimer);
+        if (movedDist > 10) return;
+        if (val === 0 || val === 50 || val === 25) addThrow(val, val === 50);
+        else if ($('floatingMultipliers').style.display !== 'flex') addThrow(val);
+    };
+    container.appendChild(btn);
+}
+
+function showPop(x, y) {
+    const pop = $('floatingMultipliers'); pop.style.display = 'flex';
+    pop.style.left = Math.min(Math.max(x, 110), window.innerWidth - 110) + 'px';
+    pop.style.top = (y < 120 ? y + 45 : y - 45) + 'px';
+    pop.style.transform = y < 120 ? 'translateX(-50%)' : 'translate(-50%, -100%)';
+}
+function hidePop() { $('floatingMultipliers').style.display = 'none'; activeBase = null; }
+function handleMult(m) { if (activeBase) addThrow(activeBase * m, m === 2); hidePop(); }
+
+function refresh() {
+    const sb = $('scoreboard'); sb.innerHTML = '';
+    const startSpacer = document.createElement('div'); startSpacer.className = 'spacer'; sb.appendChild(startSpacer);
+    gameState.players.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.className = `player ${i === gameState.currentPlayer ? 'current' : ''} ${p.isOut ? 'finished' : ''}`;
+        div.innerHTML = `<div>${p.name}</div><div class="player-score">${p.isOut?'🏆':p.score}</div>${gameState.tourMode ? `<div class="legs-count">L: ${p.legsWon}</div>` : ''}<small>🎯 ${p.dartsThrown}</small>`;
+        sb.appendChild(div);
+    });
+    const endSpacer = document.createElement('div'); endSpacer.className = 'spacer'; sb.appendChild(endSpacer);
+    $('currentPlayerName').textContent = legWinner ? `KONIEC LEGA: ${legWinner}` : gameState.players[gameState.currentPlayer].name;
+    $('turnTotal').textContent = turnThrows.reduce((a,b)=>a+b.pts, 0);
+    $('throwCount').textContent = `${turnThrows.length}/3`;
+    $('throwHistory').textContent = turnThrows.map(t => t.pts).join(' • ');
+
+    const active = gameState.players.filter(x => !x.isOut);
+    const area = $('endGameArea'); area.innerHTML = '';
+    if (active.length === 1 && gameState.players.length > 1) {
+        const b = document.createElement('button');
+        b.className = 'btn-ctrl'; b.style.background = '#e74c3c'; b.style.width = '100%'; b.textContent = "ZAKOŃCZ GRĘ";
+        b.onclick = () => { if(confirm("Zakończyć i zapisać wynik?")) endGameAndSave(); };
+        area.appendChild(b);
+    }
+    localStorage.setItem(STATE_KEY, JSON.stringify(gameState));
+}
+
+function centerActivePlayer() {
+    setTimeout(() => {
+        const activeEl = document.querySelector('.player.current');
+        if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }, 100);
+}
+
+function loadGameUI() {
+    $('setup').style.display = 'none'; $('game').style.display = 'block';
+    const container = $('dartButtons'); container.innerHTML = '';
+    for (let i = 1; i <= 20; i++) createBtn(i, container);
+    createBtn(25, container, 'btn-spec', '25');
+    createBtn(50, container, 'btn-bull', 'BULL');
+    createBtn(0, container, 'btn-zero', '0 (PUDŁO)');
+    refresh(); centerActivePlayer();
+}
+
+function confirmExit() { if(confirm("Wyjść do menu?")) { localStorage.removeItem(STATE_KEY); location.reload(); } }
+window.onload = () => { initPlayerInputs(); const s = localStorage.getItem(STATE_KEY); if(s){gameState=JSON.parse(s); loadGameUI();}};
+</script>
+</body>
+</html>
