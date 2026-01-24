@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Darty Pro - Tournament Edition</title>
-<link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json">
     <style>
         :root { --primary: #27ae60; --dark: #2c3e50; --bg: #f4f7f6; --gray: #bdc3c7; --accent: #2980b9; --danger: #e74c3c; }
         * { user-select: none; -webkit-user-select: none; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -61,6 +61,21 @@
         .btn-ctrl { padding: 15px; border-radius: 10px; border: none; color: white; font-weight: bold; flex: 1; }
         .row { display: flex; gap: 10px; width: 100%; max-width: 400px; margin: 5px auto; }
         select, input { width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; }
+
+        /* NOWE STYLE DLA OKNA POTWIERDZENIA */
+        #customConfirm {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;
+        }
+        .confirm-box {
+            background: white; padding: 25px; border-radius: 20px; width: 85%; max-width: 320px;
+            text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popIn 0.2s ease-out;
+        }
+        @keyframes popIn { from {transform: scale(0.8); opacity: 0;} to {transform: scale(1); opacity: 1;} }
+        .confirm-msg { font-size: 1.1rem; margin-bottom: 20px; font-weight: bold; color: var(--dark); line-height: 1.4; }
+        .confirm-btns { display: flex; gap: 10px; }
+        .btn-yes { background: var(--primary); color: white; flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-no { background: var(--gray); color: white; flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -88,14 +103,14 @@
 
 <div id="historyView" class="overlay-screen">
     <h3>📜 Historia Gier</h3>
-    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogs()">WYCZYŚĆ HISTORIĘ</button>
+    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogsUI()">WYCZYŚĆ HISTORIĘ</button>
     <div id="historyContent"></div>
     <button class="btn-ctrl" style="background:var(--dark); width:100%; margin-top:20px;" onclick="closeOverlays()">ZAMKNIJ</button>
 </div>
 
 <div id="statsView" class="overlay-screen">
     <h3>📊 Ranking Graczy</h3>
-    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogs()">WYCZYŚĆ STATYSTYKI</button>
+    <button class="btn-menu" style="background:var(--danger); margin-bottom: 10px;" onclick="clearLogsUI()">WYCZYŚĆ STATYSTYKI</button>
     <div id="statsContent"></div>
     <button class="btn-ctrl" style="background:var(--dark); width:100%; margin-top:20px;" onclick="closeOverlays()">ZAMKNIJ</button>
 </div>
@@ -127,14 +142,22 @@
     <button class="mult-pop" style="background:#e74c3c" onclick="handleMult(3)">x3</button>
 </div>
 
+<div id="customConfirm">
+    <div class="confirm-box">
+        <div id="confirmMsg" class="confirm-msg">Czy na pewno?</div>
+        <div class="confirm-btns">
+            <button class="btn-yes" id="confirmYes">TAK</button>
+            <button class="btn-no" id="confirmNo">NIE</button>
+        </div>
+    </div>
+</div>
+
 <script>
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('Service Worker zarejestrowany!'))
-        .catch(err => console.log('Błąd rejestracji SW:', err));
+      navigator.serviceWorker.register('./sw.js').catch(err => console.log('Błąd SW:', err));
     });
-  }
+}
 const STATE_KEY = 'dart_v23_state';
 const LOG_KEY = 'dart_v23_logs';
 let gameState = null;
@@ -145,16 +168,26 @@ let touchStart = { x: 0, y: 0 };
 let movedDist = 0;
 let legWinner = null;
 let safetyTimer = null;
+let modalAction = null; // Przechowuje funkcję do wykonania po kliknięciu TAK
 
 function $(id) { return document.getElementById(id); }
+
+// OBSŁUGA WŁASNEGO OKNA DIALOGOWEGO
+function askCustom(msg, callback) {
+    $('confirmMsg').textContent = msg;
+    $('customConfirm').style.display = 'flex';
+    modalAction = callback;
+}
+$('confirmYes').onclick = () => { $('customConfirm').style.display = 'none'; if(modalAction) modalAction(); };
+$('confirmNo').onclick = () => { $('customConfirm').style.display = 'none'; modalAction = null; };
+
 function closeOverlays() { $('historyView').style.display = 'none'; $('statsView').style.display = 'none'; }
 
-function clearLogs() {
-    if(confirm("Czy na pewno chcesz usunąć całą historię i statystyki?")) {
+function clearLogsUI() {
+    askCustom("Czy na pewno chcesz usunąć całą historię i statystyki?", () => {
         localStorage.removeItem(LOG_KEY);
         closeOverlays();
-        alert("Dane wyczyszczone.");
-    }
+    });
 }
 
 function initPlayerInputs() {
@@ -355,7 +388,7 @@ function refresh() {
     if (active.length === 1 && gameState.players.length > 1) {
         const b = document.createElement('button');
         b.className = 'btn-ctrl'; b.style.background = '#e74c3c'; b.style.width = '100%'; b.textContent = "ZAKOŃCZ GRĘ";
-        b.onclick = () => { if(confirm("Zakończyć i zapisać wynik?")) endGameAndSave(); };
+        b.onclick = () => { askCustom("Zakończyć i zapisać wynik?", endGameAndSave); };
         area.appendChild(b);
     }
     localStorage.setItem(STATE_KEY, JSON.stringify(gameState));
@@ -378,7 +411,13 @@ function loadGameUI() {
     refresh(); centerActivePlayer();
 }
 
-function confirmExit() { if(confirm("Wyjść do menu?")) { localStorage.removeItem(STATE_KEY); location.reload(); } }
+function confirmExit() { 
+    askCustom("Wyjść do menu?", () => { 
+        localStorage.removeItem(STATE_KEY); 
+        location.reload(); 
+    }); 
+}
+
 window.onload = () => { initPlayerInputs(); const s = localStorage.getItem(STATE_KEY); if(s){gameState=JSON.parse(s); loadGameUI();}};
 </script>
 </body>
